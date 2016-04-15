@@ -15,6 +15,7 @@ from keras.models import Sequential
 from keras.layers.core import Dense, Activation, Dropout
 from keras.layers.recurrent import LSTM
 from keras.utils.data_utils import get_file
+import codecs
 import numpy as np
 import random
 import sys
@@ -23,7 +24,8 @@ import sys
 model_name = 'txt_gen'
 
 #path = get_file('nietzsche.txt', origin="https://s3.amazonaws.com/text-datasets/nietzsche.txt")
-text = open('testEFS.txt').read().lower()+open('testEFS1.txt').read().lower()
+text = codecs.open('testEFS.txt', 'r', 'cp1251').read().lower() + codecs.open('testEFS1.txt', 'r', 'cp1251').read().lower()
+#text = open('testEFS.txt').read().lower()+open('testEFS1.txt').read().lower()
 print('corpus length:', len(text))
 
 chars = set(text)
@@ -65,6 +67,8 @@ model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
 json_string = model.to_json()
 open(model_name + '.json', 'w').write(json_string)
 
+model.load_weights(model_name + '.h5')
+
 def sample(a, temperature=1.0):
     # helper function to sample an index from a probability array
     a = np.log(a) / temperature
@@ -75,35 +79,35 @@ def sample(a, temperature=1.0):
 for iteration in range(1, 60):
     print()
     print('-' * 50)
-    print('Iteration', iteration)
+    print('Iteration', iteration, 'of', 60)
     model.fit(X, y, batch_size=128, nb_epoch=1)
     
     model.save_weights(model_name + '.h5', overwrite=True)
 
-    start_index = random.randint(0, len(text) - maxlen - 1)
+    if iteration%3 == 0:
+        start_index = random.randint(0, len(text) - maxlen - 1)
 
-    for diversity in [0.2, 0.5, 1.0, 1.2]:
-        print()
-        print('----- diversity:', diversity)
+        f = open(model_name + '_data.txt', 'a')
+        f.write('Iteration ' + str(iteration) + ' of ' + str(60) + '\n')
 
-        generated = ''
-        sentence = text[start_index: start_index + maxlen]
-        generated += sentence
-        print('----- Generating with seed: "' + sentence + '"')
-        sys.stdout.write(generated)
+        for diversity in [0.2, 0.5, 1.0, 1.2]:
+            generated = ''
+            sentence = text[start_index: start_index + maxlen]
+            generated += sentence
 
-        for i in range(400):
-            x = np.zeros((1, maxlen, len(chars)))
-            for t, char in enumerate(sentence):
-                x[0, t, char_indices[char]] = 1.
+            for i in range(400):
+                x = np.zeros((1, maxlen, len(chars)))
+                for t, char in enumerate(sentence):
+                    x[0, t, char_indices[char]] = 1.
 
-            preds = model.predict(x, verbose=0)[0]
-            next_index = sample(preds, diversity)
-            next_char = indices_char[next_index]
+                preds = model.predict(x, verbose=0)[0]
+                next_index = sample(preds, diversity)
+                next_char = indices_char[next_index]
 
-            generated += next_char
-            sentence = sentence[1:] + next_char
+                generated += next_char
+                sentence = sentence[1:] + next_char
 
-            sys.stdout.write(next_char)
-            sys.stdout.flush()
-        print()
+            f.write('----- diversity: ' + str(diversity) + '\n')
+            f.write(generated + '\n\n')
+
+        f.close()
