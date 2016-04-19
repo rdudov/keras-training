@@ -66,6 +66,8 @@ model.load_weights(MODEL_NAME + '.h5')
 
 start_index = random.randint(0, len(text) - maxlen - 1)
 
+f = codecs.open(MODEL_NAME + '_data1.txt', 'a', 'cp1251')
+
 for diversity in [0.2, 0.5, 1.0, 1.2]:
     print()
     print('----- diversity:', diversity)
@@ -74,9 +76,8 @@ for diversity in [0.2, 0.5, 1.0, 1.2]:
     sentence = text[start_index: start_index + maxlen]
     generated += sentence
     print('----- generating with seed: "' + sentence + '"')
-    sys.stdout.write(generated)
 
-    for i in range(400):
+    for i in range(2000):
         x = np.zeros((1, maxlen, len(chars)))
         for t, char in enumerate(sentence):
             x[0, t, char_indices[char]] = 1.
@@ -88,13 +89,9 @@ for diversity in [0.2, 0.5, 1.0, 1.2]:
         generated += next_char
         sentence = sentence[1:] + next_char
 
-        try:
-            sys.stdout.write(next_char)
-        except UnicodeEncodeError:
-            sys.stdout.flush()
-            sys.stdout.write('#')
-        except:
-            print ("Unexpected error:" + sys.exc_info()[0])
-            raise
-        sys.stdout.flush()
+    f.write('----- diversity: ' + str(diversity) + '\n')
+    f.write(generated + '\n\n')
+
     print()
+
+f.close()

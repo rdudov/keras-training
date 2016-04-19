@@ -21,10 +21,10 @@ import random
 import sys
 
 
-model_name = 'txt_gen'
+model_name = 'txt_gen_onegin'
 
 #path = get_file('nietzsche.txt', origin="https://s3.amazonaws.com/text-datasets/nietzsche.txt")
-text = codecs.open('testEFS.txt', 'r', 'cp1251').read().lower() + codecs.open('testEFS1.txt', 'r', 'cp1251').read().lower()
+text = codecs.open('onegin.txt', 'r', 'cp1251').read().lower()
 #text = open('testEFS.txt').read().lower()+open('testEFS1.txt').read().lower()
 print('corpus length:', len(text))
 
@@ -67,7 +67,7 @@ model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
 json_string = model.to_json()
 open(model_name + '.json', 'w').write(json_string)
 
-model.load_weights(model_name + '.h5')
+#model.load_weights(model_name + '.h5')
 
 def sample(a, temperature=1.0):
     # helper function to sample an index from a probability array
@@ -87,7 +87,7 @@ for iteration in range(1, 60):
     if iteration%3 == 0:
         start_index = random.randint(0, len(text) - maxlen - 1)
 
-        f = open(model_name + '_data.txt', 'a')
+        f = codecs.open(model_name + '_data.txt', 'a', 'cp1251')
         f.write('Iteration ' + str(iteration) + ' of ' + str(60) + '\n')
 
         for diversity in [0.2, 0.5, 1.0, 1.2]:
