@@ -21,10 +21,12 @@ import numpy as np
 import random
 import sys
 
-MODEL_NAME = 'txt_gen'
+MODEL_NAME = 'txt_gen_long_onegin'
 
 #path = get_file('nietzsche.txt', origin="https://s3.amazonaws.com/text-datasets/nietzsche.txt")
-text = codecs.open('testEFS.txt', 'r', 'cp1251').read().lower() + codecs.open('testEFS1.txt', 'r', 'cp1251').read().lower()
+#text = codecs.open('testEFS.txt', 'r', 'cp1251').read().lower() + codecs.open('testEFS1.txt', 'r', 'cp1251').read().lower()
+#text = open('testEFS.txt').read().lower()+open('testEFS1.txt').read().lower()
+text = codecs.open('onegin.txt', 'r', 'cp1251').read().lower()
 #text = open('testEFS.txt').read().lower()+open('testEFS1.txt').read().lower()
 print('corpus length:', len(text))
 
@@ -34,8 +36,8 @@ char_indices = dict((c, i) for i, c in enumerate(chars))
 indices_char = dict((i, c) for i, c in enumerate(chars))
 
 # cut the text in semi-redundant sequences of maxlen characters
-maxlen = 40
-step = 3
+maxlen = 256
+step = 1
 sentences = []
 next_chars = []
 for i in range(0, len(text) - maxlen, step):

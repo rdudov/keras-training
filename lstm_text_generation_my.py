@@ -21,7 +21,7 @@ import random
 import sys
 
 
-model_name = 'txt_gen_onegin'
+model_name = 'txt_gen_long_onegin'
 
 #path = get_file('nietzsche.txt', origin="https://s3.amazonaws.com/text-datasets/nietzsche.txt")
 text = codecs.open('onegin.txt', 'r', 'cp1251').read().lower()
@@ -34,10 +34,11 @@ char_indices = dict((c, i) for i, c in enumerate(chars))
 indices_char = dict((i, c) for i, c in enumerate(chars))
 
 # cut the text in semi-redundant sequences of maxlen characters
-maxlen = 40
-step = 3
+maxlen = 256
+step = 1
 sentences = []
 next_chars = []
+
 for i in range(0, len(text) - maxlen, step):
     sentences.append(text[i: i + maxlen])
     next_chars.append(text[i + maxlen])
@@ -55,9 +56,9 @@ for i, sentence in enumerate(sentences):
 # build the model: 2 stacked LSTM
 print('Build model...')
 model = Sequential()
-model.add(LSTM(512, return_sequences=True, input_shape=(maxlen, len(chars))))
+model.add(LSTM(256, return_sequences=True, input_shape=(maxlen, len(chars))))
 model.add(Dropout(0.2))
-model.add(LSTM(512, return_sequences=False))
+model.add(LSTM(256, return_sequences=False))
 model.add(Dropout(0.2))
 model.add(Dense(len(chars)))
 model.add(Activation('softmax'))
@@ -67,7 +68,7 @@ model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
 json_string = model.to_json()
 open(model_name + '.json', 'w').write(json_string)
 
-#model.load_weights(model_name + '.h5')
+model.load_weights(model_name + '.h5')
 
 def sample(a, temperature=1.0):
     # helper function to sample an index from a probability array
