@@ -6,6 +6,7 @@ Predicts sin graph.
 from __future__ import print_function
 from keras.models import Sequential
 from keras.layers import LSTM, Activation, Dense, TimeDistributed, RepeatVector
+from keras.models import model_from_json
 
 import matplotlib.pyplot as plt
 from pylab import *
@@ -18,28 +19,42 @@ from matplotlib.finance import candlestick_ohlc
 import numpy as np
 import sys
 
-k_p_large = 5.
-k_a_small = .3
-step = 20
 A = 100
-model_name = 'candles'
+k_p_large = 500.
+a_large = .3*A
+k_p_medium = 110.
+a_medium = .1*A
+k_p_small = 21.
+a_small = .04*A
+step = 10
+model_name = 'candles_3'
 
+x_size = 1000000;
+
+X = np.linspace(0,x_size,x_size+1)
+Y1 = np.asarray(A + a_large*np.sin(1/k_p_large*(X + 1000*sin(.0005*X))))
+Y2 = np.asarray(a_medium*np.sin(1/k_p_medium*(X + 400*sin(.002*X))))
+Y3 = np.asarray(a_small*np.sin(1/k_p_small*(X + 150*sin(.005*X))))
+Y = Y1 + Y2 + Y3
+
+'''
 X = np.linspace(0,100000,1000000)
 Y = np.asarray(A + np.sin(1/k_p_large*X))
+'''
 
 data = Y
 examples = 40
-y_examples = 40
+y_examples = 20
 s_n = .1
 
-nb_samples = len(Y) - examples
+nb_samples = x_size - step
 
 def candle(data,start,stop):
     open = data[start]
     close = data[stop-1]
     low = min(data[start:stop])
     high = max(data[start:stop])
-    return np.asarray([.05*(start+stop),open,high,low,close])
+    return np.asarray([.5*(start+stop),open,high,low,close])
 
 def trend(start, stop):
     if (start > stop):
@@ -49,7 +64,7 @@ def trend(start, stop):
     else:
         return [0, 0]
 
-input_c_list = [np.atleast_2d(candle(data,i,i+step)) for i in xrange(0,nb_samples-step,step)]
+input_c_list = [np.atleast_2d(candle(data,i,i+step)) for i in xrange(0,nb_samples,step)]
 input_c_mat = np.concatenate(input_c_list, axis=0)
 
 '''
@@ -82,14 +97,14 @@ def measure(val_prev, character):
 def measurize(text, start_y=0, start_x=0, step_size=step):
     res = np.zeros((len(text),5))
     val_prev = start_y
-    t = start_x + .05 * step_size
+    t = start_x + .5 * step_size
     for i in xrange(0,len(text)):
         [O,C] = measure(val_prev, text[i])
         H = max(O,C)
         L = min(O,C)
         res[i] = [t, O,H,L,C]
         val_prev = O
-        t += .1*step_size
+        t += step_size
     return res
 
 text = characterize(input_c_mat)
@@ -107,6 +122,7 @@ print('nb sequences:', len(sentences))
 
 X_data = np.zeros((len(sentences), examples, len(chars)), dtype=np.bool)
 y_data = np.zeros((len(sentences), y_examples, len(chars)), dtype=np.bool)
+
 for i, sentence in enumerate(sentences):
     for t, char in enumerate(sentence):
         X_data[i, t, char_indices[char]] = 1
@@ -127,12 +143,12 @@ Make reference data from text
 '''
 
 '''
-show_steps = step*examples + step*y_examples
+show_steps = 3 * (examples + y_examples)
 fig, (ax1,ax2) = plt.subplots(2)
-candlestick_ohlc(ax1, input_c_mat[:show_steps/step], width=.06*step)
-ax1.plot(X[:show_steps], Y[:show_steps], label='Y')
-candlestick_ohlc(ax2, data_new[:show_steps/step], width=.06*step)
-ax2.plot(X[:show_steps], Y[:show_steps], label='Y')
+candlestick_ohlc(ax1, input_c_mat[:show_steps], width=.6*step)
+ax1.plot(X[:show_steps*step], Y[:show_steps*step], label='Y')
+candlestick_ohlc(ax2, data_new[:show_steps], width=.6*step)
+ax2.plot(X[:show_steps*step], Y[:show_steps*step], label='Y')
 plt.show()
 '''
 
@@ -143,7 +159,7 @@ plt.show()
 hidden = 128
 model = Sequential()
 model.add(LSTM(input_shape=(examples, len(chars)), output_dim=hidden))
-model.add(RepeatVector(examples))
+model.add(RepeatVector(y_examples))
 model.add(LSTM(output_dim=hidden, return_sequences=True))
 model.add(TimeDistributed(Dense(len(chars))))
 model.add(Activation('softmax'))
@@ -163,7 +179,7 @@ print('Train model ' + model_name)
 #model.load_weights(model_name + '.h5')
 
 # Train
-nb_epochs = 1
+nb_epochs = 60
 for i in range(nb_epochs):
     print('Epoch', i+1, '/', nb_epochs)
     model.fit(X_data,
@@ -175,19 +191,21 @@ for i in range(nb_epochs):
 
 print('Predicting...')
 
-#TODO fix dimensions
-generated_text = indices_char[np.argmax(model.predict(X_data[i:i+1,:,:])[0])]
+offset = 310
 
-generated_data = measurize(generated_text, input_c_mat[examples-1,1], examples)
+
+predicted_data = model.predict(X_data[offset:offset+1,:,:])[0]
+generated_text = [indices_char[np.argmax(predicted_data[i,:])] for i in xrange(y_examples)]
+generated_data = measurize(generated_text, input_c_mat[examples+offset-1,1], (examples+offset)*step)
 
 print('Plotting...')
 
 show_steps = examples + y_examples
 fig, (ax1,ax2,ax3) = plt.subplots(3)
-candlestick_ohlc(ax1, input_c_mat[:show_steps], width=.06*step)
-ax1.plot(X[:show_steps*step], Y[:show_steps*step], label='Y')
-candlestick_ohlc(ax2, data_new[:show_steps], width=.06*step)
-ax2.plot(X[:show_steps*step], Y[:show_steps*step], label='Y')
-candlestick_ohlc(ax3, generated_data[:y_examples], width=.06*step)
-ax3.plot(X[:show_steps*step], Y[:show_steps*step], label='Y')
+candlestick_ohlc(ax1, input_c_mat[offset:offset+show_steps], width=.6*step)
+ax1.plot(X[offset*step:(offset+show_steps)*step], Y[offset*step:(offset+show_steps)*step], label='Y')
+candlestick_ohlc(ax2, data_new[offset:offset+show_steps], width=.6*step)
+ax2.plot(X[offset*step:(offset+show_steps)*step], Y[offset*step:(offset+show_steps)*step], label='Y')
+candlestick_ohlc(ax3, generated_data[:y_examples], width=.6*step)
+ax3.plot(X[offset*step:(offset+show_steps)*step], Y[offset*step:(offset+show_steps)*step], label='Y')
 plt.show()
