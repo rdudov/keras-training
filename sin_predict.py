@@ -209,7 +209,7 @@ for i in range(nb_epochs):
 
 print('Predicting...')
 
-offset = 200
+offset = 120
 
 
 predicted_data = model.predict(X_data[offset:offset+1,:,:])[0]

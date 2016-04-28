@@ -14,75 +14,41 @@ import time
 from matplotlib.dates import  DateFormatter, WeekdayLocator, HourLocator, \
      DayLocator, MONDAY
 from matplotlib.finance import candlestick_ohlc
-
+import pandas as pd
 import numpy as np
 import sys
 
-A = 100
-k_p_large = 500.
-a_large = .3*A
-k_p_medium = 110.
-a_medium = .1*A
-k_p_small = 21.
-a_small = .04*A
-s_n = .5
-step = 10
-model_name = 'candles_trend'
+model_name = 'quotes_trend'
 
-'''
-x_start = 0
-x_size = 1000000
-
-'''
-x_start = 1000000
-x_size = 20000
-
-
-X = np.linspace(x_start,x_start+x_size,x_size+1)
-Y1 = np.asarray(A + a_large*np.sin(1/k_p_large*(X + 1000*sin(.0005*X))))
-Y2 = np.asarray(a_medium*np.sin(1/k_p_medium*(X + 400*sin(.002*X))))
-Y3 = np.asarray(a_small*np.sin(1/k_p_small*(X + 150*sin(.005*X))))
-N = a_small*s_n*np.random.random((x_size+1))
-Y = Y1 + Y2 + Y3 + N
-
-'''
-X = np.linspace(0,100000,1000000)
-Y = np.asarray(A + np.sin(1/k_p_large*X))
-'''
-
-data = Y
 examples = 40
 y_examples = 10
+step = 1
+x_start = 0
 
-nb_samples = x_size - step
+print('Loading quotes...')
 
-def candle(data,start,stop):
-    open = data[start]
-    close = data[stop-1]
-    low = min(data[start:stop])
-    high = max(data[start:stop])
-    return np.asarray([.5*(X[start]+X[stop]),open,high,low,close])
+data_files = ['']*5
 
-def trend(start, stop):
-    if (start > stop):
-        return [0, 1]
-    elif (start < stop):
-        return [1, 0]
-    else:
-        return [0, 0]
+data_files[0] = u'C:\YandexDisk\Документы\Trading\котировки\SBER_20110429_20120428_1M.txt'
+data_files[1] = u'C:\YandexDisk\Документы\Trading\котировки\SBER_20120429_20130428_1M.txt'
+data_files[2] = u'C:\YandexDisk\Документы\Trading\котировки\SBER_20130429_20140428_1M.txt'
+data_files[3] = u'C:\YandexDisk\Документы\Trading\котировки\SBER_20140429_20150428_1M.txt'
+data_files[4] = u'C:\YandexDisk\Документы\Trading\котировки\SBER_20150429_20160427_1M.txt'
 
-input_c_list = [np.atleast_2d(candle(data,i,i+step)) for i in xrange(0,nb_samples,step)]
-input_c_mat = np.concatenate(input_c_list, axis=0)
+data = pd.DataFrame()
+for i in range(len(data_files)):
+    with open(data_files[i], 'rb') as f:
+        df = pd.read_csv(f, sep = ',', header = 0, index_col=False)
+    data = pd.concat((data,df))
 
-'''
-for i, c in enumerate(input_mat):
-    if (c[1] < c[0]):
-        print(i, "O", c[0], "H", c[1])
-    if (c[1] < c[2]):
-        print(i, "L", c[2], "H", c[1])
-    if (c[1] < c[3]):
-        print(i, "C", c[3], "H", c[1])
-'''
+data_mat = np.zeros((len(data),5))
+
+data_mat[:,0] = data.index
+data_mat[:,1:] = data[['<OPEN>','<HIGH>','<LOW>','<CLOSE>']].values
+
+#data_mat = data_mat[:10000]
+
+print('Characterize data...')
 
 steps = [-.02, -.01, -.005, -.002, -.001, -.0005, -.0001, 0, .0001, .0005, .001, .002, .005, .01, .02]
 '''
@@ -90,7 +56,7 @@ steps = [-.02, -.01, -.005, -.002, -.001, -.0005, -.0001, 0, .0001, .0005, .001,
 7..14 >= 0
 '''
 
-steps_next = [-.05, -.02, -.01, -.005, -.002, 0, .002, .005, .01, .02, .05]
+steps_next = [-.01, -.005, -.002, -.001, 0, -.001, .002, .005, .01]
 
 def character(data_prev, data_cur, steps = steps):
     rate = (data_cur-data_prev)/data_prev
@@ -118,7 +84,7 @@ def measure(val_prev, character):
 def measurize(text, start_y=0, start_x=x_start, step_size=step):
     res = np.zeros((len(text),5))
     val_prev = start_y
-    t = start_x + .5 * step_size
+    t = start_x + int(.5 * step_size)
     for i in xrange(0,len(text)):
         [O,C] = measure(val_prev, text[i])
         H = max(O,C)
@@ -128,29 +94,50 @@ def measurize(text, start_y=0, start_x=x_start, step_size=step):
         t += step_size
     return res
 
-text = characterize(input_c_mat)
-data_new = measurize(text,data[0])
+text = characterize(data_mat)
+data_new = np.zeros((len(text) - examples - y_examples,examples+y_examples,5))
+
+print('Making sentences...')
 
 sentences = []
 next_chars = []
 
 for i in range(len(text) - examples - y_examples):
     sentences.append(text[i: i + examples])
-    next_chars.append(character(input_c_mat[i + examples,4],input_c_mat[i+examples+y_examples,4],steps_next))
+    data_new[i] = measurize(text[i: i + examples + y_examples],data_mat[i,1],i)
+    next_chars.append(character(data_mat[i + examples,4],data_mat[i+examples+y_examples,4],steps_next))
 print('nb sequences:', len(sentences))
 
-X_data = np.zeros((len(sentences), examples, len(chars)), dtype=np.bool)
-y_data = np.zeros((len(sentences), len(steps_next)), dtype=np.bool)
+nb_samples = int(.9*len(sentences))
+nb_examples = int(.1*len(sentences))
 
-for i, sentence in enumerate(sentences):
+print('Making training data...')
+
+X_train = np.zeros((nb_samples, examples, len(chars)), dtype=np.bool)
+y_train = np.zeros((nb_samples, len(steps_next)), dtype=np.bool)
+X_test = np.zeros((nb_examples, examples, len(chars)), dtype=np.bool)
+y_test = np.zeros((nb_examples, len(steps_next)), dtype=np.bool)
+
+for i in range(nb_samples):
+    sentence = sentences[i]
     for t, char in enumerate(sentence):
-        X_data[i, t, char_indices[char]] = 1
+        X_train[i, t, char_indices[char]] = 1
+        
+print('Making testing data...')
+
+for i in range(nb_examples):
+    sentence = sentences[nb_samples+i-1]
+    for t, char in enumerate(sentence):
+        X_test[i, t, char_indices[char]] = 1
+        
+print('Making reference data...')
 
 data_next_new = np.zeros((len(next_chars),5))
 t = step * (examples + .5 * y_examples)
-for i, next_char in enumerate(next_chars):
-    y_data[i, next_char] = 1
-    o = input_c_mat[i + examples,4]
+for i in range(nb_samples):
+    next_char = next_chars[i]
+    y_train[i, next_char] = 1
+    o = data_mat[i + examples,4]
     c = o*(1 + steps_next[next_char])
     h = max(o,c)
     l = min(o,c)
@@ -158,23 +145,12 @@ for i, next_char in enumerate(next_chars):
     t += step
 
 '''
-TODO:
-+Make input data from text
-+Make reference data from text
-+1. Predict reference data as is (check with noise)
-1.1. Make dictionary independent from data
-2. Predict trends
-3. If doesn't work prorerly check if text can be generated from graph.
-'''
-
-'''
 show_steps = examples + y_examples
 fig, (ax1,ax2) = plt.subplots(2)
-candlestick_ohlc(ax1, data_new[:show_steps], width=.6*step)
+candlestick_ohlc(ax1, data_mat[:show_steps], width=.6*step)
 candlestick_ohlc(ax1, data_next_new[:1], width=y_examples*step)
-ax1.plot(X[:show_steps*step], Y[:show_steps*step], label='Y')
+candlestick_ohlc(ax2, data_new[0,:show_steps], width=.6*step)
 candlestick_ohlc(ax2, data_next_new[:1], width=y_examples*step)
-ax2.plot(X[:show_steps*step], Y[:show_steps*step], label='Y')
 plt.show()
 '''
 
@@ -204,11 +180,11 @@ print('Train model ' + model_name)
 #model.load_weights(model_name + '.h5')
 
 # Train
-nb_epochs = 60
+nb_epochs = 30
 for i in range(nb_epochs):
     print('Epoch', i+1, '/', nb_epochs)
-    model.fit(X_data,
-              y_data,
+    model.fit(X_train,
+              y_train,
               nb_epoch=1)
 
     #Save weights
@@ -216,12 +192,12 @@ for i in range(nb_epochs):
 
 print('Predicting...')
 
-offset = 120
+offset = 0
 
-predicted_data = model.predict(X_data[offset:offset+1,:,:])[0]
+predicted_data = model.predict(X_test[offset:offset+1,:,:])[0]
 generated_char = np.argmax(predicted_data)
-t = x_start + step * (examples+offset + .5 * y_examples)
-o = input_c_mat[offset + examples - 1,4]
+t = x_start + step * (nb_samples + examples + offset + int(.5 * y_examples))
+o = data_mat[nb_samples + offset + examples - 1,4]
 c = o*(1 + steps_next[generated_char])
 h = max(o,c)
 l = min(o,c)
@@ -230,8 +206,9 @@ generated_data = [t,o,h,l,c]
 print('Plotting...')
 
 show_steps = examples + y_examples
-fig, ax1 = plt.subplots()
-candlestick_ohlc(ax1, data_new[offset:offset+examples], width=.6*step)
+fig, (ax1,ax2) = plt.subplots(2)
+candlestick_ohlc(ax1, data_mat[nb_samples+offset:nb_samples+offset+show_steps], width=.6*step)
 candlestick_ohlc(ax1, [generated_data], width=y_examples*step)
-ax1.plot(X[offset*step:(offset+show_steps)*step], Y[offset*step:(offset+show_steps)*step], label='Y')
+candlestick_ohlc(ax2, data_new[nb_samples+offset], width=.6*step)
+candlestick_ohlc(ax2, [generated_data], width=y_examples*step)
 plt.show()
