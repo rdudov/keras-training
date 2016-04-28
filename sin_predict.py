@@ -1,5 +1,6 @@
 ﻿'''
-Predicts trends in sin graph.
+Predicts sin graph.
+
 '''
 
 from __future__ import print_function
@@ -27,16 +28,15 @@ k_p_small = 21.
 a_small = .04*A
 s_n = .5
 step = 10
-model_name = 'candles_trend'
+model_name = 'candles_4'
 
-'''
 x_start = 0
 x_size = 1000000
 
 '''
-x_start = 0
+x_start = 1000000
 x_size = 20000
-
+'''
 
 X = np.linspace(x_start,x_start+x_size,x_size+1)
 Y1 = np.asarray(A + a_large*np.sin(1/k_p_large*(X + 1000*sin(.0005*X))))
@@ -85,14 +85,13 @@ for i, c in enumerate(input_mat):
 '''
 
 steps = [-.02, -.01, -.005, -.002, -.001, -.0005, -.0001, 0, .0001, .0005, .001, .002, .005, .01, .02]
+
 '''
 0..7 <= 0
 7..14 >= 0
 '''
 
-steps_next = [-.02, -.01, -.005, -.002, -.001, 0, .001, .002, .005, .01, .02]
-
-def character(data_prev, data_cur, steps = steps):
+def character(data_prev, data_cur):
     rate = (data_cur-data_prev)/data_prev
     for i in range(len(steps)):
         if rate <= 0 and rate <= steps[i]:
@@ -129,33 +128,27 @@ def measurize(text, start_y=0, start_x=x_start, step_size=step):
     return res
 
 text = characterize(input_c_mat)
-data_new = measurize(text,data[0])
 
 sentences = []
-next_chars = []
+next_sentences = []
 
 for i in range(len(text) - examples - y_examples):
     sentences.append(text[i: i + examples])
-    next_chars.append(character(input_c_mat[i + examples,4],input_c_mat[i+examples+y_examples,4],steps_next))
+    next_sentences.append(text[i + examples:i+examples+y_examples])
 print('nb sequences:', len(sentences))
 
 X_data = np.zeros((len(sentences), examples, len(chars)), dtype=np.bool)
-y_data = np.zeros((len(sentences), 1, len(steps_next)), dtype=np.bool)
+y_data = np.zeros((len(sentences), y_examples, len(chars)), dtype=np.bool)
 
 for i, sentence in enumerate(sentences):
     for t, char in enumerate(sentence):
         X_data[i, t, char_indices[char]] = 1
 
-data_next_new = np.zeros((len(next_chars),5))
-t = step * (examples + .5 * y_examples)
-for i, next_char in enumerate(next_chars):
-    y_data[i, 0, next_char] = 1
-    o = input_c_mat[i + examples,4]
-    c = o*(1 + steps_next[next_char])
-    h = max(o,c)
-    l = min(o,c)
-    data_next_new[i] = [t,o,h,l,c]
-    t += step
+for i, next_sentence in enumerate(next_sentences):
+    for t, next_char in enumerate(next_sentence):
+        y_data[i, t, char_indices[next_char]] = 1
+
+data_new = measurize(text,data[0])
 
 '''
 TODO:
@@ -168,12 +161,11 @@ TODO:
 '''
 
 '''
-show_steps = examples + y_examples
+show_steps = 3 * (examples + y_examples)
 fig, (ax1,ax2) = plt.subplots(2)
-candlestick_ohlc(ax1, data_new[:show_steps], width=.6*step)
-candlestick_ohlc(ax1, data_next_new[:1], width=y_examples*step)
+candlestick_ohlc(ax1, input_c_mat[:show_steps], width=.6*step)
 ax1.plot(X[:show_steps*step], Y[:show_steps*step], label='Y')
-candlestick_ohlc(ax2, data_next_new[:1], width=y_examples*step)
+candlestick_ohlc(ax2, data_new[:show_steps], width=.6*step)
 ax2.plot(X[:show_steps*step], Y[:show_steps*step], label='Y')
 plt.show()
 '''
@@ -185,14 +177,14 @@ plt.show()
 hidden = 128
 model = Sequential()
 model.add(LSTM(input_shape=(examples, len(chars)), output_dim=hidden))
-model.add(RepeatVector(1))
+model.add(RepeatVector(y_examples))
 model.add(LSTM(output_dim=hidden, return_sequences=True))
-model.add(TimeDistributed(Dense(len(steps_next))))
+model.add(TimeDistributed(Dense(len(chars))))
 model.add(Activation('softmax'))
 
 print('Compile model ' + model_name)
 
-model.compile(loss='sparse_categorical_crossentropy', optimizer='rmsprop', metrics = ['accuracy'])
+model.compile(loss='categorical_crossentropy', optimizer='rmsprop', metrics = ['accuracy'])
 
 print('Save model ' + model_name)
 
@@ -205,7 +197,7 @@ print('Train model ' + model_name)
 #model.load_weights(model_name + '.h5')
 
 # Train
-nb_epochs = 3
+nb_epochs = 60
 for i in range(nb_epochs):
     print('Epoch', i+1, '/', nb_epochs)
     model.fit(X_data,
@@ -217,22 +209,21 @@ for i in range(nb_epochs):
 
 print('Predicting...')
 
-offset = 0
+offset = 200
+
 
 predicted_data = model.predict(X_data[offset:offset+1,:,:])[0]
-generated_char = indices_char[np.argmax(predicted_data[0,:])]
-t = x_start + step * (examples+offset + .5 * y_examples)
-o = input_c_mat[offset + examples,4]
-c = o*(1 + steps_next[generated_char])
-h = max(o,c)
-l = min(o,c)
-generated_data = [t,o,h,l,c]
+generated_text = [indices_char[np.argmax(predicted_data[i,:])] for i in xrange(y_examples)]
+generated_data = measurize(generated_text, data_new[examples+offset-1,1], x_start+(examples+offset)*step)
 
 print('Plotting...')
 
 show_steps = examples + y_examples
-fig, ax1 = plt.subplots()
-candlestick_ohlc(ax1, data_new[offset:offset+examples], width=.6*step)
-candlestick_ohlc(ax1, generated_data, width=y_examples*step)
+fig, (ax1,ax2,ax3) = plt.subplots(3)
+candlestick_ohlc(ax1, input_c_mat[offset:offset+show_steps], width=.6*step)
 ax1.plot(X[offset*step:(offset+show_steps)*step], Y[offset*step:(offset+show_steps)*step], label='Y')
+candlestick_ohlc(ax2, data_new[offset:offset+show_steps], width=.6*step)
+ax2.plot(X[offset*step:(offset+show_steps)*step], Y[offset*step:(offset+show_steps)*step], label='Y')
+candlestick_ohlc(ax3, generated_data[:y_examples], width=.6*step)
+ax3.plot(X[offset*step:(offset+show_steps)*step], Y[offset*step:(offset+show_steps)*step], label='Y')
 plt.show()
