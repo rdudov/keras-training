@@ -1,5 +1,5 @@
 ﻿'''
-Predicts trends for real quotes.
+Predicts graph for real quotes.
 '''
 
 from __future__ import print_function
@@ -18,10 +18,10 @@ import pandas as pd
 import numpy as np
 import sys
 
-model_name = 'quotes_trend'
+model_name = 'quotes_predict'
 
 examples = 40
-y_examples = 10
+y_examples = 20
 step = 1
 x_start = 0
 
@@ -55,8 +55,6 @@ steps = [-.02, -.01, -.005, -.002, -.001, -.0005, -.0001, 0, .0001, .0005, .001,
 0..7 <= 0
 7..14 >= 0
 '''
-
-steps_next = [-.01, -.005, -.002, -.001, 0, -.001, .002, .005, .01]
 
 def character(data_prev, data_cur, steps = steps):
     rate = (data_cur-data_prev)/data_prev
@@ -100,12 +98,12 @@ data_new = np.zeros((len(text) - examples - y_examples,examples+y_examples,5))
 print('Making sentences...')
 
 sentences = []
-next_chars = []
+next_sentences = []
 
 for i in range(len(text) - examples - y_examples):
     sentences.append(text[i: i + examples])
     data_new[i] = measurize(text[i: i + examples + y_examples],data_mat[i,1],i)
-    next_chars.append(character(data_mat[i + examples,4],data_mat[i+examples+y_examples,4],steps_next))
+    next_sentences.append(text[i + examples:i+examples+y_examples])
 print('nb sequences:', len(sentences))
 
 nb_samples = int(.9*len(sentences))
@@ -114,14 +112,18 @@ nb_examples = int(.1*len(sentences))
 print('Making training data...')
 
 X_train = np.zeros((nb_samples, examples, len(chars)), dtype=np.bool)
-y_train = np.zeros((nb_samples, len(steps_next)), dtype=np.bool)
+y_train = np.zeros((nb_samples, y_examples, len(chars)), dtype=np.bool)
 X_test = np.zeros((nb_examples, examples, len(chars)), dtype=np.bool)
-y_test = np.zeros((nb_examples, len(steps_next)), dtype=np.bool)
+y_test = np.zeros((nb_examples, y_examples, len(chars)), dtype=np.bool)
 
 for i in range(nb_samples):
     sentence = sentences[i]
     for t, char in enumerate(sentence):
         X_train[i, t, char_indices[char]] = 1
+
+    next_sentence = next_sentences[i]
+    for t, next_char in enumerate(next_sentence):
+        y_train[i, t, char_indices[next_char]] = 1
         
 print('Making testing data...')
 
@@ -129,44 +131,28 @@ for i in range(nb_examples):
     sentence = sentences[nb_samples+i-1]
     for t, char in enumerate(sentence):
         X_test[i, t, char_indices[char]] = 1
-        
-print('Making reference data...')
 
-data_next_new = np.zeros((len(next_chars),5))
-t = step * (examples + .5 * y_examples)
-for i in range(nb_samples):
-    next_char = next_chars[i]
-    y_train[i, next_char] = 1
-    o = data_mat[i + examples,4]
-    c = o*(1 + steps_next[next_char])
-    h = max(o,c)
-    l = min(o,c)
-    data_next_new[i] = [t,o,h,l,c]
-    t += step
+    next_sentence = next_sentences[nb_samples+i-1]
+    for t, next_char in enumerate(next_sentence):
+        y_test[i, t, char_indices[next_char]] = 1
 
 '''
 show_steps = examples + y_examples
 fig, (ax1,ax2) = plt.subplots(2)
 candlestick_ohlc(ax1, data_mat[:show_steps], width=.6*step, colorup='grey', colordown='k')
-candlestick_ohlc(ax1, data_next_new[:1], width=y_examples*step,alpha=.5)
-candlestick_ohlc(ax2, data_new[0,:show_steps], width=.6*step, colorup='grey', colordown='k')
-candlestick_ohlc(ax2, data_next_new[:1], width=y_examples*step,alpha=.5)
-#plt.show()
-fig.savefig('plots/' + model_name + '.png')   # save the figure to file
-plt.close(fig)    # close the figure
+candlestick_ohlc(ax2, data_new[0,:], width=.6*step, colorup='grey', colordown='k')
+plt.show()
 '''
-
 
 #model = model_from_json(open(model_name + '.json').read())
 
 
 hidden = 128
 model = Sequential()
-model.add(LSTM(input_shape=(examples, len(chars)), output_dim=hidden, return_sequences=True))
-model.add(Dropout(.2))
-model.add(LSTM(hidden))
-model.add(Dropout(.2))
-model.add(Dense(len(steps_next)))
+model.add(LSTM(input_shape=(examples, len(chars)), output_dim=hidden))
+model.add(RepeatVector(y_examples))
+model.add(LSTM(output_dim=hidden, return_sequences=True))
+model.add(TimeDistributed(Dense(len(chars))))
 model.add(Activation('softmax'))
 
 print('Compile model ' + model_name)
@@ -188,22 +174,18 @@ def predict_and_plot(offset=0, show=False, save=True, path='plots/' + model_name
     print('Predicting...')
 
     predicted_data = model.predict(X_test[offset:offset+1,:,:])[0]
-    generated_char = np.argmax(predicted_data)
-    t = x_start + step * (nb_samples + examples + offset + int(.5 * y_examples))
-    o = data_mat[nb_samples + offset + examples - 1,4]
-    c = o*(1 + steps_next[generated_char])
-    h = max(o,c)
-    l = min(o,c)
-    generated_data = [t,o,h,l,c]
+    generated_text = [indices_char[np.argmax(predicted_data[i,:])] for i in xrange(y_examples)]
+    generated_data = measurize(generated_text, data_mat[examples+offset-1,1], nb_samples+x_start+(examples+offset)*step)
+
 
     print('Plotting...')
 
     show_steps = examples + y_examples
     fig, (ax1,ax2) = plt.subplots(2)
     candlestick_ohlc(ax1, data_mat[nb_samples+offset:nb_samples+offset+show_steps], width=.6*step, colorup='grey', colordown='k')
-    candlestick_ohlc(ax1, [generated_data], width=y_examples*step,alpha=.5)
+    candlestick_ohlc(ax1, generated_data[:y_examples], width=.6*step*step,alpha=.5, colorup='r', colordown='k')
     candlestick_ohlc(ax2, data_new[nb_samples+offset], width=.6*step, colorup='grey', colordown='k')
-    candlestick_ohlc(ax2, [generated_data], width=y_examples*step,alpha=.5)
+    candlestick_ohlc(ax2, generated_data[:y_examples], width=.6*step*step,alpha=.5, colorup='r', colordown='k')
     if show:
         plt.show()
     if save:
@@ -225,3 +207,7 @@ for i in range(nb_epochs):
     for j in range(3):
         offset = np.random.randint(len(X_test)-1)
         predict_and_plot(offset=offset, path='plots/' + model_name + '_ep'+str(i) + '_plt' + str(j) + '.png')
+
+
+
+predict_and_plot(offset = 0, show=True,save=False)
